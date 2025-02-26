@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>One Dash Board</title>
+
+  <!-- External CSS (adjust path if needed) -->
+  <link rel="stylesheet" href="CSS/styles.css">
+
+  <!-- Load D3 and TopoJSON from CDNs (only once) -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/topojson@3"></script>
+
+  <style>
+    body {
+      font-family: sans-serif; 
+      margin: 20px;
+    }
+    h1 { margin-bottom: 1rem; }
+    label { margin-right: 0.5rem; }
+    select { margin-right: 1rem; }
+    .chart-section { margin-bottom: 2rem; }
+
+    /* 
+      We wrap everything in a flex container (#dashboard-container).
+      #leftSide has a fixed width, #rightSide is flex:1 so it expands,
+      pushing the map more to the left.
+    */
+    #dashboard-container {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 20px; /* spacing between left & right side */
+    }
+
+    /* Left side: fixed width, narrower so the map is forced more left */
+    #leftSide {
+      width: 450px; /* Adjust as needed (e.g., 400px, 500px) */
+    }
+
+    /* Right side: takes remaining space */
+    #rightSide {
+      flex: 1;  /* expands to fill leftover horizontal space */
+    }
+
+    /* The charts' <svg> styling */
+    svg {
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+      margin-bottom: 20px; /* small gap below each svg */
+    }
+
+    /* Tooltip styling */
+    #tooltip {
+      position: absolute;
+      display: none;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 6px;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>US Choropleth Map & Dashboard</h1>
+
+  <!-- A container that uses flex to position left & right side by side -->
+  <div id="dashboard-container">
+
+    <!-- LEFT SIDE: charts + chart dropdowns -->
+    <div id="leftSide">
+      <!-- Dropdown Controls for the charts -->
+      <div id="dropdowns">
+        <label for="xSelect">X-axis / Chart #1:</label>
+        <select id="xSelect"></select>
+
+        <label for="ySelect">Y-axis / Chart #2:</label>
+        <select id="ySelect"></select>
+      </div>
+
+      <!-- Four Charts -->
+      <div id="charts" class="chart-section">
+        <h2>1) "hist1Title"</h2>
+        <svg id="hist1" width="400" height="300"></svg>
+      </div>
+
+      <div class="chart-section">
+        <h2>2) hist1Title</h2>
+        <svg id="hist2" width="400" height="300"></svg>
+      </div>
+
+      <div class="chart-section">
+        <h2>3) Scatterplot (X vs. Y)</h2>
+        <svg id="scatter" width="500" height="400"></svg>
+      </div>
+
+      <div class="chart-section">
+        <h2>4) Grouped Bar (Top 10 by X, 2 Bars: X & Y)</h2>
+        <svg id="groupedBar" width="600" height="400"></svg>
+      </div>
+    </div> <!-- end #leftSide -->
+
+    <!-- RIGHT SIDE: map measure dropdown + the map -->
+    <div id="rightSide">
+      <h2>5) Choropleth Map</h2>
+
+      <!-- Map measure dropdown -->
+      <label for="measureSelect">Choose a measure:</label>
+      <select id="measureSelect"></select>
+
+      <!-- The map container (for the ChoroplethMap) -->
+      <div id="map"></div>
+    </div> <!-- end #rightSide -->
+
+  </div> <!-- end #dashboard-container -->
+
+  <!-- Shared tooltip for charts or map -->
+  <div id="tooltip"></div>
+
+  <!-- Pattern for missing data (optional) -->
+  <svg height="5" width="5" xmlns="http://www.w3.org/2000/svg" version="1.1"
+       style="position: absolute; visibility: hidden;">
+    <defs>
+      <pattern id="lightstripe" patternUnits="userSpaceOnUse" width="5" height="5">
+        <image xlink:href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc1JyBoZWlnaHQ9JzUnPgogIDxyZWN0IHdpZHRoPSc1JyBoZWlnaHQ9JzUnIGZpbGw9J3doaXRlJy8+CiAgPHBhdGggZD0nTTAgNUw1IDBaTTYgNEw0IDZaTS0xIDFMMSAtMVonIHN0cm9rZT0nIzg4OCcgc3Ryb2tlLXdpZHRoPScxJy8+Cjwvc3ZnPg=="
+               x="0" y="0" width="5" height="5"></image>
+      </pattern>
+    </defs>
+  </svg>
+
+  <!-- Your existing chart code + map code scripts (ChoroplethMap.js, etc.) -->
+  <script>
+  /*******************************************
+   * 1) Columns to Offer in Dropdowns
+   *******************************************/
+  const numericColumns = [
+    "poverty_perc",
+    "median_household_income",
+    "education_less_than_high_school_percent",
+    "air_quality",
+    "park_access",
+    "percent_inactive",
+    "percent_smoking",
+    "elderly_percentage",
+    "number_of_hospitals",
+    "number_of_primary_care_physicians",
+    "percent_no_heath_insurance",
+    "percent_high_blood_pressure",
+    "percent_coronary_heart_disease",
+    "percent_stroke",
+    "percent_high_cholesterol"
+  ];
+
+  // We'll store the CSV data in a global array so we can re-draw everything on demand
+  let allData = [];
+
+  /*******************************************
+   * 2) LOAD CSV ONCE, THEN BUILD DROPDOWNS,
+   *    AND DRAW INITIAL CHARTS
+   *******************************************/
+  d3.csv("Data/national_health_data_2024.csv").then(function(data) {
+    // Convert columns to numeric
+    data.forEach(d => {
+      d.county = d.display_name;
+      numericColumns.forEach(col => {
+        d[col] = +d[col];
+      });
+    });
+
+    allData = data; // store for reuse
+
+    // Populate the two dropdowns
+    populateDropdown("#xSelect", numericColumns);
+    populateDropdown("#ySelect", numericColumns);
+
+    // Set default selections (choose any two to start)
+    d3.select("#xSelect").property("value", "poverty_perc");
+    d3.select("#ySelect").property("value", "percent_high_blood_pressure");
+
+    // Draw everything once initially
+    updateAllCharts();
+
+    // Re-draw everything each time the user changes a dropdown
+    d3.select("#xSelect").on("change", updateAllCharts);
+    d3.select("#ySelect").on("change", updateAllCharts);
+  });
+
+  /*******************************************
+   * 3) updateAllCharts(): Called whenever
+   *    user picks new X or Y
+   *******************************************/
+  function updateAllCharts() {
+    // Grab chosen columns
+    const xCol = d3.select("#xSelect").property("value");
+    const yCol = d3.select("#ySelect").property("value");
+
+    // 1) Clear old contents
+    d3.select("#hist1").selectAll("*").remove();
+    d3.select("#hist2").selectAll("*").remove();
+    d3.select("#scatter").selectAll("*").remove();
+    d3.select("#groupedBar").selectAll("*").remove();
+
+    // 2) Re-draw each chart with the chosen columns
+    createHistogram(allData, xCol, "#hist1", "Histogram of " + xCol);
+    createHistogram(allData, yCol, "#hist2", "Histogram of " + yCol);
+    createScatterplot(allData, xCol, yCol, "#scatter");
+
+    // For the grouped bar, let's do top 10 counties by xCol
+    let filtered = allData.filter(d => !isNaN(d[xCol]) && !isNaN(d[yCol]));
+    filtered.sort((a, b) => b[xCol] - a[xCol]);
+    let top10 = filtered.slice(0, 10);
+
+    createGroupedBarChart(top10, xCol, yCol, "#groupedBar");
+  }
+
+  /*******************************************
+   * 4) CHART-BUILDING FUNCTIONS
+   *******************************************/
+
+  // 4a) Populate a <select> with the numericColumns
+  function populateDropdown(selector, columns) {
+    const dropdown = d3.select(selector);
+    dropdown.selectAll("option")
+      .data(columns)
+      .enter().append("option")
+        .attr("value", d => d)
+        .text(d => d);
+  }
+
+  // 4b) Create a histogram for a chosen numeric column
+  function createHistogram(data, key, svgSelector, title) {
+    const svg = d3.select(svgSelector),
+          width = +svg.attr("width"),
+          height = +svg.attr("height"),
+          margin = { top: 20, right: 30, bottom: 30, left: 40 };
+
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, d => d[key]))
+      .nice()
+      .range([margin.left, width - margin.right]);
+
+    const bins = d3.bin()
+      .domain(x.domain())
+      .thresholds(20)(data.map(d => d[key]));
+
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(bins, d => d.length)])
+      .nice()
+      .range([height - margin.bottom, margin.top]);
+
+    svg.selectAll(".bar")
+      .data(bins)
+      .enter().append("rect")
+        .attr("class", "bar")
+        .attr("x", d => x(d.x0) + 1)
+        .attr("y", d => y(d.length))
+        .attr("width", d => x(d.x1) - x(d.x0) - 1)
+        .attr("height", d => height - margin.bottom - y(d.length))
+        .attr("fill", "steelblue");
+
+    svg.append("g")
+      .attr("transform", `translate(0,${height - margin.bottom})`)
+      .call(d3.axisBottom(x));
+
+    svg.append("g")
+      .attr("transform", `translate(${margin.left},0)`)
+      .call(d3.axisLeft(y));
+
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", margin.top)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "14px")
+      .text(title);
+  }
+
+  // 4c) Create a scatterplot for chosen X and Y columns
+  function createScatterplot(data, keyX, keyY, svgSelector) {
+    const svg = d3.select(svgSelector),
+          width = +svg.attr("width"),
+          height = +svg.attr("height"),
+          margin = { top: 20, right: 20, bottom: 40, left: 50 };
+
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, d => d[keyX]))
+      .nice()
+      .range([margin.left, width - margin.right]);
+    const y = d3.scaleLinear()
+      .domain(d3.extent(data, d => d[keyY]))
+      .nice()
+      .range([height - margin.bottom, margin.top]);
+
+    svg.append("g")
+      .attr("transform", `translate(0, ${height - margin.bottom})`)
+      .call(d3.axisBottom(x));
+    svg.append("g")
+      .attr("transform", `translate(${margin.left}, 0)`)
+      .call(d3.axisLeft(y));
+
+    svg.selectAll("circle")
+      .data(data)
+      .enter().append("circle")
+        .attr("cx", d => x(d[keyX]))
+        .attr("cy", d => y(d[keyY]))
+        .attr("r", 3)
+        .attr("fill", "blue")
+        .attr("fill-opacity", 0.6);
+
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", margin.top)
+      .attr("text-anchor", "middle")
+      .style("font-size", "14px")
+      .text(`Scatter: ${keyX} vs. ${keyY}`);
+
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", height - 5)
+      .attr("text-anchor", "middle")
+      .text(keyX);
+
+    svg.append("text")
+      .attr("text-anchor", "middle")
+      .attr("transform", `translate(${margin.left - 35}, ${height/2}) rotate(-90)`)
+      .text(keyY);
+  }
+
+  // 4d) Create a grouped bar for top 10 counties by xCol, with subgroups [xCol, yCol]
+  function createGroupedBarChart(data, xCol, yCol, svgSelector) {
+    const svg = d3.select(svgSelector),
+          width = +svg.attr("width"),
+          height = +svg.attr("height"),
+          margin = { top: 40, right: 30, bottom: 60, left: 60 };
+
+    const subgroups = [xCol, yCol];
+    const groups = data.map(d => d.county);
+
+    const x0 = d3.scaleBand()
+      .domain(groups)
+      .range([margin.left, width - margin.right])
+      .padding(0.2);
+
+    const x1 = d3.scaleBand()
+      .domain(subgroups)
+      .range([0, x0.bandwidth()])
+      .padding(0.05);
+
+    const maxVal = d3.max(data, d => Math.max(d[xCol], d[yCol]));
+    const y = d3.scaleLinear()
+      .domain([0, maxVal]).nice()
+      .range([height - margin.bottom, margin.top]);
+
+    const color = d3.scaleOrdinal()
+      .domain(subgroups)
+      .range(["steelblue", "orange"]);
+
+    svg.append("g")
+      .attr("transform", `translate(0, ${height - margin.bottom})`)
+      .call(d3.axisBottom(x0))
+      .selectAll("text")
+        .attr("transform", "rotate(-45)")
+        .style("text-anchor", "end");
+
+    svg.append("g")
+      .attr("transform", `translate(${margin.left},0)`)
+      .call(d3.axisLeft(y));
+
+    svg.append("g")
+      .selectAll("g")
+      .data(data)
+      .enter().append("g")
+        .attr("transform", d => `translate(${x0(d.county)},0)`)
+      .selectAll("rect")
+      .data(d => subgroups.map(key => ({ key: key, value: d[key] })))
+      .enter().append("rect")
+        .attr("x", d => x1(d.key))
+        .attr("y", d => y(d.value))
+        .attr("width", x1.bandwidth())
+        .attr("height", d => y(0) - y(d.value))
+        .attr("fill", d => color(d.key));
+
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", margin.top / 2)
+      .attr("text-anchor", "middle")
+      .style("font-size", "16px")
+      .text(`Top 10: ${xCol} & ${yCol}`);
+
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", height - 5)
+      .attr("text-anchor", "middle")
+      .text(`Counties (by ${xCol})`);
+
+    svg.append("text")
+      .attr("text-anchor", "middle")
+      .attr("transform", `translate(${margin.left - 40}, ${height/2}) rotate(-90)`)
+      .text(`${xCol} & ${yCol}`);
+
+    const legend = svg.selectAll(".legend")
+      .data(subgroups)
+      .enter().append("g")
+        .attr("transform", (d,i) => `translate(${margin.left}, ${margin.top + i*20})`);
+
+    legend.append("rect")
+      .attr("x", 0)
+      .attr("width", 18)
+      .attr("height", 18)
+      .attr("fill", d => color(d));
+
+    legend.append("text")
+      .attr("x", 24)
+      .attr("y", 9)
+      .attr("dy", "0.35em")
+      .style("font-size", "12px")
+      .text(d => d);
+  }
+  </script>
+
+  <!-- MAP measure code, scripts, etc. (ChoroplethMap.js) should follow below -->
+  <script src="JS/ChoroplethMap.js"></script>
+
+</body>
+</html>

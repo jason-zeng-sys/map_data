@@ -1,0 +1,88 @@
+/* Basic reset & page style */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 20px;
+    font-family: Arial, sans-serif;
+    background-color: #fff;
+    color: #333;
+  }
+  
+  /* Headings & text */
+  h1 {
+    margin-bottom: 0.5em;
+  }
+  
+  h2 {
+    margin-bottom: 0.5em;
+    margin-top: 1.5em;
+  }
+  
+  /* Put any description or paragraph text in a smaller font */
+  p {
+    margin-bottom: 1em;
+    color: #555;
+  }
+  
+  /* A container that holds everything */
+  #charts {
+    max-width: 1200px;
+    margin: 0 auto;  /* center the content */
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;       /* vertical spacing between sections */
+  }
+  
+  /* Histograms section side-by-side */
+  #histograms {
+    display: flex;
+    justify-content: center; /* center horizontally */
+    gap: 2rem;              /* space between histograms */
+  }
+  
+  #histograms svg {
+    /* Some breathing room for each chart */
+    border: 1px solid #ccc;
+    background-color: #fafafa;
+    width: 400px;  /* fix a size or rely on the SVG’s own width attribute */
+    height: 300px;
+  }
+  
+  /* Scatterplot section */
+  #scatterplot {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* center the heading and chart */
+  }
+  
+  #scatterplot svg {
+    border: 1px solid #ccc;
+    background-color: #fafafa;
+    width: 500px;
+    height: 400px;
+  }
+  
+  /* Tooltip styling (if you add tooltips in a div) */
+  .tooltip {
+    position: absolute;
+    padding: 6px 10px;
+    font-size: 0.9rem;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    pointer-events: none; /* so the mouse can go "through" the tooltip */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  #dashboard-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  #leftSide { flex: 1; }
+  #rightSide { width: 600px; }
+  
