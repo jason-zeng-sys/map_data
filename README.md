@@ -152,7 +152,7 @@ These observations can guide further analysis or policy focus.
 
 
 ## 9) Demo Video
-A **2–3 minute** demo video can be found here: [*Your video link*].  
+A **2–3 minute** demo video can be found here: (https://www.youtube.com/watch?v=sttxkalOrMM) 
 It demonstrates:
 - Changing the chart measures (`xSelect`, `ySelect`) to see histograms, scatterplots, and bar charts update.
 - Switching the map measure (`measureSelect`) to recolor counties based on different indicators.
